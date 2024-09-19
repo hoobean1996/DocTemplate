@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <base target="_top" />
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+    }
+
+    h1 {
+      color: #333;
+    }
+
+    .form-group {
+      margin-bottom: 15px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 5px;
+    }
+
+    input[type="text"] {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+
+    button {
+      background-color: #4caf50;
+      color: white;
+      padding: 10px 15px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background-color: #45a049;
+    }
+
+    .notice-container {
+      background-color: #e9f7ef;
+      border: 1px solid #27ae60;
+      border-radius: 4px;
+      padding: 15px;
+      margin-bottom: 20px;
+      position: relative;
+    }
+
+    .notice-label {
+      position: absolute;
+      top: -10px;
+      left: 10px;
+      background-color: white;
+      padding: 0 5px;
+      color: #27ae60;
+      font-size: 12px;
+      font-weight: bold;
+    }
+
+    .notice-text {
+      font-size: 14px;
+      line-height: 1.5;
+      color: #333;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>Add Property</h1>
+
+  <div class="notice-container">
+    <span class="notice-label">Notice</span>
+    <div class="notice-text">
+      Properties are global values that can be accessed throughout the document.
+    </div>
+  </div>
+
+  <div class="form-group">
+    <label for="propertyKey">Property Key:</label>
+    <input type="text" id="propertyKey" name="propertyKey" />
+  </div>
+
+  <div class="form-group">
+    <label for="propertyValue">Property Value:</label>
+    <input type="text" id="propertyValue" name="propertyValue" />
+  </div>
+
+  <button onclick="saveProperty()">Save Property</button>
+
+  <script>
+    function saveProperty() {
+      var key = document.getElementById("propertyKey").value;
+      var value = document.getElementById("propertyValue").value;
+      google.script.run.withSuccessHandler(onSuccess)
+        .withFailureHandler(() => { })
+        .createProperty(key, value);
+    }
+
+    function onSuccess(properties) {
+      google.script.run.withSuccessHandler(() => { })
+        .withFailureHandler(() => { })
+        .showSidebar();
+      google.script.host.close();
+    }
+  </script>
+</body>
+
+</html>

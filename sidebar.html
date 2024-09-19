@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Google Doc Add-On Sidebar</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+  <style>
+    /* General styles */
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      width: 300px;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* Tab styles */
+    .tabs {
+      display: flex;
+      border-bottom: 1px solid #ccc;
+    }
+
+    .tab {
+      padding: 10px;
+      cursor: pointer;
+      background-color: #f1f1f1;
+      border: none;
+      outline: none;
+      flex-grow: 1;
+      text-align: center;
+    }
+
+    .tab.active {
+      background-color: #fff;
+      border-bottom: 2px solid #4285f4;
+    }
+
+    .tab-content {
+      display: none;
+      padding: 10px;
+      height: calc(100vh - 41px);
+      overflow-y: auto;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    /* Table styles */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    th,
+    td {
+      border: 1px solid #ddd;
+      padding: 8px;
+      text-align: left;
+    }
+
+    th {
+      background-color: #f2f2f2;
+    }
+
+    /* Dropdown styles */
+    .dropdown {
+      position: relative;
+      display: inline-block;
+    }
+
+    .dropdown-content,
+    .dropdown-menu {
+      display: none;
+      position: absolute;
+      background-color: #f9f9f9;
+      min-width: 160px;
+      box-shadow: 0px 8px 16px 0px rgba(0, 0, 0, 0.2);
+      z-index: 1;
+    }
+
+    .dropdown-content a,
+    .dropdown-menu a {
+      color: black;
+      padding: 12px 16px;
+      text-decoration: none;
+      display: block;
+    }
+
+    .dropdown-content a:hover,
+    .dropdown-menu a:hover {
+      background-color: #f1f1f1;
+    }
+
+    .dropdown:hover .dropdown-content,
+    .dropdown-menu.show {
+      display: block;
+    }
+
+    .dropdown-btn,
+    .dropdown-toggle {
+      background-color: #4285f4;
+      color: white;
+      padding: 5px 10px;
+      border: none;
+      cursor: pointer;
+    }
+
+    .dropdown-toggle {
+      background-color: #f1f1f1;
+      color: black;
+      font-size: 16px;
+      padding: 10px;
+    }
+
+    .dropdown-menu li {
+      list-style-type: none;
+    }
+
+    /* Chat styles */
+    #chat-messages {
+      height: calc(100vh - 130px);
+      overflow-y: auto;
+      border: 1px solid #ddd;
+      padding: 10px;
+      margin-bottom: 10px;
+    }
+
+    .message {
+      margin-bottom: 10px;
+      padding: 5px;
+      border-radius: 5px;
+    }
+
+    .user-message {
+      background-color: #e3f2fd;
+      text-align: right;
+    }
+
+    .bot-message {
+      background-color: #f1f1f1;
+    }
+
+    #chat-input {
+      width: calc(100% - 70px);
+      padding: 5px;
+    }
+
+    #send-btn {
+      width: 60px;
+      margin-left: 5px;
+    }
+
+    /* Button group styles */
+    .button-group {
+      margin-top: 20px;
+    }
+
+    .button-group button {
+      margin: 20px 10px 20px 0;
+      padding: 10px 20px;
+      background-color: #4caf50;
+      color: white;
+      border: none;
+      cursor: pointer;
+      transition: background-color 0.3s;
+    }
+
+    .button-group button:hover {
+      background-color: #45a049;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="tabs">
+    <button class="tab" data-tab="overview">Overview</button>
+    <button class="tab active" data-tab="placeholder">Placeholder</button>
+    <button class="tab" data-tab="chat">Chat</button>
+  </div>
+
+  <div id="overview" class="tab-content">
+    <div class="dropdown">
+      <button class="dropdown-toggle">Actions</button>
+      <ul class="dropdown-menu">
+        <li><a href="#" id="create-keyvalue-btn">Create</a></li>
+      </ul>
+    </div>
+    <table id="overview-table">
+      <thead>
+        <tr>
+          <th>Key</th>
+          <th>Name</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div id="placeholder" class="tab-content active">
+    <div class="dropdown">
+      <button class="dropdown-toggle">Actions</button>
+      <ul class="dropdown-menu">
+        <li><a href="#" id="create-placeholder-btn">Create</a></li>
+        <li><a href="#" id="highlight-placeholder-btn">Highlight</a></li>
+        <li><a href="#" id="hide-placeholder-btn">Hide</a></li>
+        <li><a href="#" id="delete-placeholders-btn">Delete All</a></li>
+      </ul>
+    </div>
+    <table id="placeholder-table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Color</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+  <div id="chat" class="tab-content">
+    <div id="chat-messages"></div>
+    <input type="text" id="chat-input" placeholder="Type a message..." />
+    <button id="send-btn" class="dropdown-btn">Send</button>
+  </div>
+  <script>
+    function renderProperties(response) {
+      console.log('response', response);
+      const $tableBody = $("#overview-table tbody");
+      $tableBody.empty();
+
+      $.each(response.properties, function (index, property) {
+        const { name, value } = property;
+
+        var $row = $("<tr>");
+        $("<td>").text(name).appendTo($row);
+        $("<td>").text(value).appendTo($row);
+
+        // Actions column
+        var $actionsCell = $("<td>");
+        var $dropdown = $("<div>").addClass("dropdown");
+
+        var $dropdownBtn = $("<button>")
+          .addClass("dropdown-btn")
+          .text("Actions")
+          .appendTo($dropdown);
+
+        var $dropdownContent = $("<div>")
+          .addClass("dropdown-content")
+          .appendTo($dropdown);
+
+        $("<a>")
+          .attr("href", "#")
+          .addClass("delete-btn")
+          .attr("data-name", name)
+          .text("Delete")
+          .appendTo($dropdownContent)
+          .on("click", (e) => {
+            google.script.run
+              .withSuccessHandler(renderProperties)
+              .withFailureHandler(() => { })
+              .removeProperty(name);
+          });
+        $dropdown.appendTo($actionsCell);
+        $actionsCell.appendTo($row);
+        $row.appendTo($tableBody);
+      });
+    }
+
+    function renderPlaceholders(response) {
+      const $tableBody = $("#placeholder-table tbody");
+      $tableBody.empty();
+
+      $.each(response.placeholders, function (index, placeholder) {
+        const { id, name, color } = placeholder;
+
+        var $row = $("<tr>");
+        $("<td>").text(placeholder.name).appendTo($row);
+        $("<td>").css("background-color", placeholder.color).appendTo($row);
+
+        // Actions column
+        var $actionsCell = $("<td>");
+        var $dropdown = $("<div>").addClass("dropdown");
+
+        var $dropdownBtn = $("<button>")
+          .addClass("dropdown-btn")
+          .text("Actions")
+          .appendTo($dropdown);
+
+        var $dropdownContent = $("<div>")
+          .addClass("dropdown-content")
+          .appendTo($dropdown);
+
+        $("<a>")
+          .attr("href", "#")
+          .addClass("delete-btn")
+          .attr("data-name", placeholder.name)
+          .text("Delete")
+          .appendTo($dropdownContent)
+          .on("click", (e) => {
+            google.script.run
+              .withSuccessHandler(renderPlaceholders)
+              .withFailureHandler(function () { })
+              .removeNamedRange(id);
+          });
+
+        $("<a>")
+          .attr("href", "#")
+          .addClass("open-btn")
+          .attr("data-name", placeholder.name)
+          .text("Locate")
+          .appendTo($dropdownContent)
+          .on('click', (e) => {
+            console.log('click locate', id);
+            google.script.run
+              .withSuccessHandler(() => { })
+              .withFailureHandler(() => { })
+              .locateNamedRange(id);
+          });
+
+        $("<a>")
+          .attr("href", "#")
+          .addClass("open-btn")
+          .attr("data-name", placeholder.name)
+          .text("Open")
+          .appendTo($dropdownContent)
+          .on('click', (e) => {
+            console.log('click open', id);
+            google.script.run
+              .withSuccessHandler(() => { })
+              .withFailureHandler(() => { })
+              .showPlaceholderDialog(id);
+          });
+
+        $dropdown.appendTo($actionsCell);
+        $actionsCell.appendTo($row);
+
+        $row.appendTo($tableBody);
+      });
+    }
+
+    function getAllPlaceholder() {
+      google.script.run
+        .withSuccessHandler(renderPlaceholders)
+        .withFailureHandler(function () { })
+        .listNamedRanges(true);
+    }
+
+    function getAllProperties() {
+      google.script.run
+        .withSuccessHandler(renderProperties)
+        .withFailureHandler(function () { })
+        .listProperties();
+    }
+
+    $(document).ready(function () {
+      $('#create-keyvalue-btn').click(function (e) {
+        $('.dropdown-menu').removeClass('show');
+        google.script.run
+          .withSuccessHandler(() => { })
+          .withFailureHandler(() => { })
+          .showCreatePropertiesDialog();
+      });
+
+      $('#delete-keyvalue-btn').click(function (e) {
+        $('.dropdown-menu').removeClass('show');
+      });
+
+      $("#create-placeholder-btn").click(function (e) {
+        $(".dropdown-menu").removeClass("show");
+        google.script.run
+          .withSuccessHandler(() => { })
+          .withFailureHandler(() => { })
+          .showCreatePlaceholderDialog();
+      });
+
+      $("#highlight-placeholder-btn").click(function (e) {
+        $(".dropdown-menu").removeClass("show");
+        google.script.run
+          .withSuccessHandler(renderPlaceholders)
+          .withFailureHandler(() => { })
+          .listNamedRanges(true);
+      });
+
+      $("#hide-placeholder-btn").click(function (e) {
+        $(".dropdown-menu").removeClass("show");
+        google.script.run
+          .withSuccessHandler(renderPlaceholders)
+          .withFailureHandler(() => { })
+          .listNamedRanges(false);
+      });
+
+      $('#delete-placeholders-btn').click(function (e) {
+        $('.dropdown-menu').removeClass("show");
+        google.script.run
+          .withSuccessHandler(renderPlaceholders)
+          .withFailureHandler(() => { })
+          .removeAllNamedRanges(false);
+      })
+
+      // Toggle dropdown menu
+      $(".dropdown-toggle").click(function (e) {
+        e.preventDefault();
+        $(this).siblings(".dropdown-menu").toggleClass("show");
+      });
+
+      // Close dropdown when clicking outside
+      $(document).click(function (e) {
+        if (!$(e.target).closest(".dropdown").length) {
+          $(".dropdown-menu").removeClass("show");
+        }
+      });
+
+      // Prevent dropdown from closing when clicking inside it
+      $(".dropdown-menu").click(function (e) {
+        e.stopPropagation();
+      });
+
+      getAllProperties();
+      getAllPlaceholder();
+
+      $(".tab").click(function () {
+        $(".tab").removeClass("active");
+        $(".tab-content").removeClass("active");
+        $(this).addClass("active");
+        $("#" + $(this).data("tab")).addClass("active");
+      });
+
+      // Dropdown menu functionality
+      $(".delete-btn").click(function (e) {
+        e.preventDefault();
+        alert("Delete action clicked");
+      });
+
+      $(".open-btn").click(function (e) {
+        e.preventDefault();
+        alert("Open action clicked");
+      });
+
+      // Chat functionality
+      $("#send-btn").click(sendMessage);
+      $("#chat-input").keypress(function (e) {
+        if (e.which == 13) {
+          sendMessage();
+        }
+      });
+
+      function sendMessage() {
+        var message = $("#chat-input").val();
+        if (message.trim() !== "") {
+          $("#chat-messages").append(
+            '<div class="message user-message">' + message + "</div>"
+          );
+          $("#chat-input").val("");
+          $("#chat-messages").scrollTop($("#chat-messages")[0].scrollHeight);
+
+          // Simulate bot response (you can replace this with actual API call)
+          setTimeout(function () {
+            $("#chat-messages").append(
+              '<div class="message bot-message">This is a simulated response.</div>'
+            );
+            $("#chat-messages").scrollTop(
+              $("#chat-messages")[0].scrollHeight
+            );
+          }, 1000);
+        }
+      }
+    });
+  </script>
+</body>
+
+</html>
