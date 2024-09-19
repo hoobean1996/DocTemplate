@@ -10,6 +10,7 @@
 
 type CreateNamedRangeOptions = {
   name: string;
+  kind: 'filler' | 'condition',
   scope: "one" | "all";
 };
 
@@ -78,7 +79,7 @@ type ListNamedRangesResponse = {
  * Lists all named ranges in the current document.
  * @returns {ListNamedRangesResponse} An object containing an array of placeholders.
  */
-function listNamedRanges(withColor: boolean): ListNamedRangesResponse {
+function listNamedRanges(withColor: boolean, updateColor: boolean = true): ListNamedRangesResponse {
   const doc = DocumentApp.getActiveDocument();
   const namedRanges = doc.getNamedRanges();
   var colors = ['#FFD700', '#FF69B4', '#00CED1', '#32CD32', '#FFA500', '#9370DB', '#20B2AA'];
@@ -95,13 +96,17 @@ function listNamedRanges(withColor: boolean): ListNamedRangesResponse {
         var endOffset = rangeElements[j].getEndOffsetInclusive();
 
         if (startOffset != null && endOffset != null) {
-          text.setBackgroundColor(startOffset, endOffset,
-            withColor ? color : null
-          );
+          if (updateColor) {
+            text.setBackgroundColor(startOffset, endOffset,
+              withColor ? color : null
+            );
+          }
         } else {
-          text.setBackgroundColor(
-            withColor ? color : null
-          );
+          if (updateColor) {
+            text.setBackgroundColor(
+              withColor ? color : null
+            );
+          }
         }
       }
     }
@@ -243,7 +248,7 @@ type CreatePropertyResponse = {
   data: ListPropertyResponse,
 }
 
-function createProperty(name:string, value:string): CreatePropertyResponse {
+function createProperty(name: string, value: string): CreatePropertyResponse {
   const ps = PropertiesService.getDocumentProperties();
   ps.setProperty(name, value);
   return {
@@ -257,4 +262,32 @@ function removeProperty(name: string): ListPropertyResponse {
   const ps = PropertiesService.getDocumentProperties();
   ps.deleteProperty(name);
   return listProperties();
-} 
+}
+
+type GenerateDocumentRequest = {
+  mockedPlaceholders: {
+    id: string,
+    value: string,
+  }[]
+}
+
+function generateDocument(request: GenerateDocumentRequest): string {
+  const mockedPlaceholders = request.mockedPlaceholders;
+  const sourceDoc = DocumentApp.getActiveDocument();
+  const sourceID = sourceDoc.getId();
+  const destDocFile = DriveApp.getFileById(sourceID).makeCopy("Test Case of " + sourceDoc.getName());
+  const destDocID = destDocFile.getId();
+  try {
+    const requests = mockedPlaceholders.map((placeholder) => {
+      return {
+        replaceNamedRangeContent: {
+          namedRangeId: 'kix.' + placeholder.id,
+          text: placeholder.value,
+        }
+      } as GoogleAppsScript.Docs.Schema.Request;
+    })
+    Docs.Documents?.batchUpdate({ 'requests': requests }, destDocID);
+  } catch (e) {
+    return e.message;
+  }
+}

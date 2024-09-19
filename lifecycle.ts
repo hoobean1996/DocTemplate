@@ -10,6 +10,14 @@ function showCreatePropertiesDialog() {
   DocumentApp.getUi().showModalDialog(html, "Create Property");
 }
 
+function openGenDocumentDialog() {
+  const template = HtmlService.createTemplateFromFile("genDocumentDialog");
+  const listNamedRangesResponse = listNamedRanges(false, false);
+  template.placeholders = listNamedRangesResponse.placeholders;
+  const html = template.evaluate().setWidth(800).setHeight(600);
+  DocumentApp.getUi().showModalDialog(html, "Generate Document");
+}
+
 function showCreatePlaceholderDialog() {
   const template = HtmlService.createTemplateFromFile("createPlaceholderDialog");
   const selectedText = getSelectedText();

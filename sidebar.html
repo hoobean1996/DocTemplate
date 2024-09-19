@@ -209,6 +209,7 @@
         <li><a href="#" id="highlight-placeholder-btn">Highlight</a></li>
         <li><a href="#" id="hide-placeholder-btn">Hide</a></li>
         <li><a href="#" id="delete-placeholders-btn">Delete All</a></li>
+        <li><a href="#" id="gen-document-btn">Generate</a></li>
       </ul>
     </div>
     <table id="placeholder-table">
@@ -401,6 +402,14 @@
           .withFailureHandler(() => { })
           .removeAllNamedRanges(false);
       })
+
+      $('#gen-document-btn').click(function (e) {
+        $('.dropdown-menu').removeClass('show');
+        google.script.run
+          .withSuccessHandler(()=>{})
+          .withFailureHandler(()=>{})
+          .openGenDocumentDialog();
+      });
 
       // Toggle dropdown menu
       $(".dropdown-toggle").click(function (e) {
