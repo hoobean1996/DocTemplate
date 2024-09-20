@@ -54,7 +54,11 @@ function createNamedRange(
       rangeBuilder.addElement(text, startOffset, endOffset);
     }
   }
-  document.addNamedRange(options.name, rangeBuilder.build());
+  if (options.kind === 'filler') {
+    document.addNamedRange('[F]' + options.name, rangeBuilder.build());
+  } else {
+    document.addNamedRange('[C]' + options.name, rangeBuilder.build());
+  }
   return {
     status: 0,
     message: "OK",
@@ -267,7 +271,7 @@ function removeProperty(name: string): ListPropertyResponse {
 type GenerateDocumentRequest = {
   mockedPlaceholders: {
     id: string,
-    value: string,
+    value: string | boolean,
   }[]
 }
 
@@ -277,16 +281,67 @@ function generateDocument(request: GenerateDocumentRequest): string {
   const sourceID = sourceDoc.getId();
   const destDocFile = DriveApp.getFileById(sourceID).makeCopy("Test Case of " + sourceDoc.getName());
   const destDocID = destDocFile.getId();
+  const destDoc = DocumentApp.openById(destDocID);
+  const operations: { rangeElementType: string, parentElementType: string, parentElementText: string }[] = [];
   try {
     const requests = mockedPlaceholders.map((placeholder) => {
-      return {
-        replaceNamedRangeContent: {
-          namedRangeId: 'kix.' + placeholder.id,
-          text: placeholder.value,
+      switch (typeof placeholder.value) {
+        case 'string': {
+          return {
+            replaceNamedRangeContent: {
+              namedRangeId: 'kix.' + placeholder.id,
+              text: placeholder.value,
+            }
+          } as GoogleAppsScript.Docs.Schema.Request;
         }
-      } as GoogleAppsScript.Docs.Schema.Request;
+        case 'boolean': {
+          const namedRange = destDoc.getNamedRangeById(placeholder.id);
+          const range = namedRange.getRange();
+          const elements = range.getRangeElements();
+
+          // 从后向前遍历元素，以避免删除影响索引
+          for (let i = elements.length - 1; i >= 0; i--) {
+            const element = elements[i];
+            const isPartial = (element.isPartial());
+            const rangeElement = element.getElement();
+            const parent = rangeElement.getParent();
+            if (parent.getType() === DocumentApp.ElementType.PARAGRAPH
+              || parent.getType() === DocumentApp.ElementType.LIST_ITEM) {
+              parent.removeFromParent();
+            }
+
+            // if (rangeElement.editAsText) {
+            //   const text = rangeElement.editAsText();
+            //   if (isPartial) {
+            //     const startIndex = element.getStartOffset();
+            //     const endIndex = element.getEndOffsetInclusive();
+            //     text.deleteText(startIndex, endIndex);
+            //     operations.push({
+            //       rangeElementType: rangeElement.getType().toString(),
+            //       parentElementType: rangeElement.getParent().getType().toString(),
+            //       parentElementText: 'isPartial',
+            //     })
+            //   } else {
+            //     const parent = rangeElement.getParent();
+            //     rangeElement.removeFromParent();
+            //     operations.push({
+            //       rangeElementType: rangeElement.getType().toString(),
+            //       parentElementType: rangeElement.getParent().getType().toString(),
+            //       parentElementText: parent.getText(),
+            //     })
+            //   }
+            // } else {
+            //   // 非文本元素（如图片、表格等）
+            //   rangeElement.removeFromParent();
+            // }
+          }
+          return null;
+        }
+      }
+
     })
-    Docs.Documents?.batchUpdate({ 'requests': requests }, destDocID);
+    Docs.Documents?.batchUpdate({ 'requests': requests.filter(r => r != null) }, destDocID);
+    return JSON.stringify({ 'requests': requests, 'operations': operations });
   } catch (e) {
     return e.message;
   }

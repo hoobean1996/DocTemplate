@@ -119,7 +119,7 @@
     <label for="placeholderType">Type:</label>
     <select id="placeholderType" name="placeholderType">
       <option value="filler">Filler (Used for simple text replacement)</option>
-      <option value="conditional">All (Used for dynamic content based on conditions)</option>
+      <option value="conditional">Conditional (Used for dynamic content based on conditions)</option>
     </select>
   </div>
 
@@ -135,12 +135,13 @@
 
   <script>
     function createPlaceholder() {
-      var name = document.getElementById("placeholderName").value;
-      var scope = document.getElementById("placeholderScope").value;
-
+      const name = document.getElementById("placeholderName").value;
+      const scope = document.getElementById("placeholderScope").value;
+      const kind = document.getElementById("placeholderType").value;
       google.script.run.withSuccessHandler(onSuccess).createNamedRange({
         name: name,
         scope: scope,
+        kind: kind,
       });
     }
 

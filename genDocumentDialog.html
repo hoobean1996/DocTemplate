@@ -83,7 +83,16 @@
           <?= placeholders[i].name ?>
         </td>
         <td>
+          <? if (placeholders[i].name.substring(0, 3) === '[F]') { ?>
           <input type="text" id="<?= placeholders[i].id ?>" name="<?= placeholders[i].name ?>">
+          <? } else if (placeholders[i].name.substring(0, 3) === '[C]') { ?>
+          <label>
+            <input type="checkbox" id="<?= placeholders[i].id ?>" name="<?= placeholders[i].name ?>">
+            Hide it
+          </label>
+          <? } else { ?>
+          <input type="text" id="<?= placeholders[i].id ?>" name="<?= placeholders[i].name ?>">
+          <? } ?>
         </td>
       </tr>
       <? } ?>
@@ -94,6 +103,12 @@
     function generateDocument() {
       var inputs = document.getElementsByTagName("input");
       const mockedPlaceholders = Array.from(inputs).map((input) => {
+        if (input.type === 'checkbox') {
+          return {
+            id: input.id,
+            value: input.checked,
+          }
+        }
         return {
           id: input.id,
           value: input.value,
