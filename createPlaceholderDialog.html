@@ -151,6 +151,7 @@
      * @param {CreateNamedRangeResponse} result - The result of the createNamedRange operation.
      */
     function onSuccess(result) {
+      console.log('result = ', result);
       google.script.run.withSuccessHandler(() => { })
         .withFailureHandler(() => { })
         .showSidebar();

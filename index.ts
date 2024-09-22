@@ -1,13 +1,3 @@
-/**
- * @OnlyCurrentDoc
- *
- * The above comment directs Apps Script to limit the scope of file
- * access for this add-on. It specifies that this add-on will only
- * attempt to read or modify the files in which the add-on is used,
- * and not all of the user's files. The authorization request message
- * presented to users will reflect this limited scope.
- */
-
 type CreateNamedRangeOptions = {
   name: string;
   kind: 'filler' | 'condition',
@@ -17,7 +7,7 @@ type CreateNamedRangeOptions = {
 type CreateNamedRangeResponse = {
   status: Number;
   message: "OK" | "Error";
-  data: ListNamedRangesResponse,
+  data: ListNamedRangesResponse | null,
 };
 
 function createNamedRange(
@@ -35,35 +25,43 @@ function createNamedRange(
       data: listNamedRanges(true),
     };
   }
-
-  var elements = selection.getRangeElements();
-  for (let i = 0; i < elements.length; i++) {
-    const element = elements[i].getElement();
-    // @ts-ignore
-    // 判断当前元素是否能够转换为Text
-    if (element.editAsText) {
+  try {
+    var elements = selection.getRangeElements();
+    for (let i = 0; i < elements.length; i++) {
+      const element = elements[i].getElement();
       // @ts-ignore
-      var text = element.editAsText();
-      var startOffset = elements[i].isPartial()
-        ? elements[i].getStartOffset()
-        : 0;
-      var endOffset = elements[i].isPartial()
-        ? elements[i].getEndOffsetInclusive()
-        : text.getText().length - 1;
-      text.setBackgroundColor(startOffset, endOffset, "#00FF00"); // 设置为绿色
-      rangeBuilder.addElement(text, startOffset, endOffset);
+      // 判断当前元素是否能够转换为Text
+      if (element.editAsText) {
+        // @ts-ignore
+        var text = element.editAsText();
+        var startOffset = elements[i].isPartial()
+          ? elements[i].getStartOffset()
+          : 0;
+        var endOffset = elements[i].isPartial()
+          ? elements[i].getEndOffsetInclusive()
+          : text.getText().length - 1;
+        text.setBackgroundColor(startOffset, endOffset, "#00FF00"); // 设置为绿色
+        rangeBuilder.addElement(text, startOffset, endOffset);
+      }
     }
+    if (options.kind === 'filler') {
+      document.addNamedRange('[F]' + options.name, rangeBuilder.build());
+    } else {
+      document.addNamedRange('[C]' + options.name, rangeBuilder.build());
+    }
+    return {
+      status: 0,
+      message: "OK",
+      data: listNamedRanges(true),
+    };
+  } catch (err) {
+    return {
+      status: 0,
+      // @ts-ignore
+      message: 'Error: ' + err.message,
+      data: null,
+    };
   }
-  if (options.kind === 'filler') {
-    document.addNamedRange('[F]' + options.name, rangeBuilder.build());
-  } else {
-    document.addNamedRange('[C]' + options.name, rangeBuilder.build());
-  }
-  return {
-    status: 0,
-    message: "OK",
-    data: listNamedRanges(true),
-  };
 }
 
 /**
@@ -275,7 +273,46 @@ type GenerateDocumentRequest = {
   }[]
 }
 
+
+
+function getTopLevelContainer(element) {
+  while (
+    element.getParent() &&
+    element.getParent().getType() !== DocumentApp.ElementType.BODY_SECTION
+  ) {
+    element = element.getParent();
+  }
+  return element;
+}
+
+/// Remove given document's namedRange's color
+function removeNamedRangesColorByDocumentID(id: string): void {
+  const doc = DocumentApp.openById(id);
+  const namedRanges = doc.getNamedRanges();
+  namedRanges.forEach((range, i) => {
+    var rangeElements = range.getRange().getRangeElements();
+    for (var j = 0; j < rangeElements.length; j++) {
+      var element = rangeElements[j].getElement();
+      // @ts-ignore
+      if (element.editAsText) {
+        // @ts-ignore
+        var text = element.editAsText();
+        var startOffset = rangeElements[j].getStartOffset();
+        var endOffset = rangeElements[j].getEndOffsetInclusive();
+
+        if (startOffset != null && endOffset != null) {
+          text.setBackgroundColor(startOffset, endOffset, null);
+        } else {
+          text.setBackgroundColor(null);
+        }
+      }
+    }
+    range.remove();
+  });
+}
+
 function generateDocument(request: GenerateDocumentRequest): string {
+  listNamedRanges(false);
   const mockedPlaceholders = request.mockedPlaceholders;
   const sourceDoc = DocumentApp.getActiveDocument();
   const sourceID = sourceDoc.getId();
@@ -287,62 +324,137 @@ function generateDocument(request: GenerateDocumentRequest): string {
     const requests = mockedPlaceholders.map((placeholder) => {
       switch (typeof placeholder.value) {
         case 'string': {
+          const ps = PropertiesService.getDocumentProperties();
+          const namedRange = sourceDoc.getNamedRangeById(placeholder.id);
+          const name = namedRange.getName();
+          let value = (placeholder.value.trim().length > 0) ? placeholder.value : ps.getProperty(name.substring(3,));
+          if (value == null) {
+            value = 'Unset';
+          }
           return {
             replaceNamedRangeContent: {
               namedRangeId: 'kix.' + placeholder.id,
-              text: placeholder.value,
+              text: value,
             }
           } as GoogleAppsScript.Docs.Schema.Request;
         }
         case 'boolean': {
+          if (placeholder.value === false) {
+            return null;
+          }
           const namedRange = destDoc.getNamedRangeById(placeholder.id);
           const range = namedRange.getRange();
-          const elements = range.getRangeElements();
-
-          // 从后向前遍历元素，以避免删除影响索引
-          for (let i = elements.length - 1; i >= 0; i--) {
-            const element = elements[i];
-            const isPartial = (element.isPartial());
-            const rangeElement = element.getElement();
-            const parent = rangeElement.getParent();
-            if (parent.getType() === DocumentApp.ElementType.PARAGRAPH
-              || parent.getType() === DocumentApp.ElementType.LIST_ITEM) {
-              parent.removeFromParent();
+          const rangeElements = range.getRangeElements();
+          for (let i = rangeElements.length - 1; i >= 0; i--) {
+            const rangeElement = rangeElements[i];
+            const element = rangeElement.getElement();
+            const parent = element.getParent();
+            const topLevelParent = getTopLevelContainer(element);
+            parent.removeFromParent();
+            if (topLevelParent.getType() === DocumentApp.ElementType.TABLE) {
+              try {
+                topLevelParent.removeFromParent();
+              } catch (err) { }
             }
-
-            // if (rangeElement.editAsText) {
-            //   const text = rangeElement.editAsText();
-            //   if (isPartial) {
-            //     const startIndex = element.getStartOffset();
-            //     const endIndex = element.getEndOffsetInclusive();
-            //     text.deleteText(startIndex, endIndex);
-            //     operations.push({
-            //       rangeElementType: rangeElement.getType().toString(),
-            //       parentElementType: rangeElement.getParent().getType().toString(),
-            //       parentElementText: 'isPartial',
-            //     })
-            //   } else {
-            //     const parent = rangeElement.getParent();
-            //     rangeElement.removeFromParent();
-            //     operations.push({
-            //       rangeElementType: rangeElement.getType().toString(),
-            //       parentElementType: rangeElement.getParent().getType().toString(),
-            //       parentElementText: parent.getText(),
-            //     })
-            //   }
-            // } else {
-            //   // 非文本元素（如图片、表格等）
-            //   rangeElement.removeFromParent();
-            // }
           }
           return null;
         }
       }
-
     })
-    Docs.Documents?.batchUpdate({ 'requests': requests.filter(r => r != null) }, destDocID);
+    if (requests.filter(r => r != null).length > 0) {
+      Docs.Documents?.batchUpdate({ 'requests': requests.filter(r => r != null) }, destDocID);
+    }
+    removeEmptyParagraphs(destDocID);
     return JSON.stringify({ 'requests': requests, 'operations': operations });
   } catch (e) {
     return e.message;
   }
+}
+
+
+function inspectNamedRange(namedRange: GoogleAppsScript.Document.NamedRange): string {
+  var result = {
+    rangeElementsCount: 0,
+  };
+
+  const rangeElements = namedRange.getRange().getRangeElements();
+  result.rangeElementsCount = rangeElements.length;
+
+  const rangeElementInfos = [];
+  try {
+    for (let i = 0; i < rangeElements.length; i++) {
+      var rangeElementInfo = {
+        startOffset: -1,
+        endOffset: -1,
+        elementType: DocumentApp.ElementType.UNSUPPORTED,
+        topLevelElementType: DocumentApp.ElementType.UNSUPPORTED,
+      };
+      const rangeElement = rangeElements[i];
+      rangeElementInfo.startOffset = rangeElement.getStartOffset();
+      rangeElementInfo.endOffset = rangeElement.getEndOffsetInclusive();
+      const originalElement = rangeElement.getElement();
+      rangeElementInfo.elementType = originalElement.getType();
+      const parent = originalElement.getParent();
+      const topLevelParent = getTopLevelContainer(originalElement);
+      rangeElementInfo.parent = parent.getType();
+      rangeElementInfo.topLevelElementType = topLevelParent.getType();
+
+      if (topLevelParent.getType() === DocumentApp.ElementType.TABLE) {
+        const table = topLevelParent.asTable() as GoogleAppsScript.Document.Table;
+        rangeElementInfo.isTable = true;
+        rangeElementInfo.text = table.getText();
+      }
+
+      if (topLevelParent.getType() === DocumentApp.ElementType.LIST_ITEM) {
+        const listItem = topLevelParent.asListItem() as GoogleAppsScript.Document.ListItem;
+        rangeElementInfo.isList = true;
+        rangeElementInfo.listId = listItem.getListId();
+      }
+
+      // @ts-ignore
+      rangeElementInfos.push(rangeElementInfo);
+    }
+  } catch (err) { }
+  result.rangeElementInfos = rangeElementInfos;
+  return JSON.stringify(result);
+}
+
+function removeEmptyParagraphs(id: string) {
+  var doc = DocumentApp.openById(id);
+  var body = doc.getBody();
+  var numChildren = body.getNumChildren();
+
+  // 从后向前遍历，以避免删除元素时影响索引
+  for (var i = numChildren - 1; i >= 0; i--) {
+    var child = body.getChild(i);
+
+    if (child.getType() === DocumentApp.ElementType.PARAGRAPH) {
+      var paragraph = child.asParagraph();
+
+      try {
+        if (isEmptyParagraph(paragraph)) {
+          body.removeChild(paragraph);
+        }
+      } catch (e) { }
+    }
+  }
+}
+
+function isEmptyParagraph(paragraph) {
+  // 检查段落的文本内容
+  var text = paragraph.getText().trim();
+  console.log('text: ' + text);
+  // 检查段落是否包含任何内联图片
+  var numChildren = paragraph.getNumChildren();
+  var hasInlineImages = false;
+
+  for (var i = 0; i < numChildren; i++) {
+    if (paragraph.getChild(i).getType() === DocumentApp.ElementType.INLINE_IMAGE) {
+      hasInlineImages = true;
+      break;
+    }
+  }
+
+  // 如果文本为空且没有内联图片，则认为段落为空
+  return text === "" && !hasInlineImages;
 }

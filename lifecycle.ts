@@ -40,6 +40,7 @@ function showPlaceholderDialog(id: string) {
   const template = HtmlService.createTemplateFromFile("editPlaceholderDialog");
   template.id = id;
   template.name = namedRange.getName();
+  template.inspect = inspectNamedRange(namedRange);
   const html = template.evaluate()
     .setWidth(800)
     .setHeight(600);
