@@ -1,4 +1,8 @@
 # DocTemplate
+A Google Doc Add-on which provides below functionalities:
+- Manage Filler (A placeholder which could be replaced by a value)
+- Manage Conditional (A placehold which could control the visibility of content)
+- Manage Shared Values (A list of Key-Value pairs can be shared in the Add-on)
 
-- style guide: https://developers.google.com/workspace/add-ons/guides/editor-style
-- css: https://developers.google.com/workspace/add-ons/guides/css
+By creating fillers and conditional could make a Google Doc act as a Template, we provide a 
+Generate feature that can fill in those fillers and conditionals to generate a finalised document.
